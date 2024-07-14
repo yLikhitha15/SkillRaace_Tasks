@@ -1,0 +1,111 @@
+import java.util.*;
+import java.util.stream.Collectors;
+
+public class NaiveBayesianClassifier {
+    private Map<String, Integer> vocabulary;
+    private Map<String, Map<String, Integer>> wordCountsPerClass;
+    private Map<String, Integer> classCounts;
+    private Set<String> classes;
+
+    public NaiveBayesianClassifier() {
+        this.vocabulary = new HashMap<>();
+        this.wordCountsPerClass = new HashMap<>();
+        this.classCounts = new HashMap<>();
+        this.classes = new HashSet<>();
+    }
+
+    private List<String> preprocessText(String text) {
+        return Arrays.stream(text.toLowerCase().split("\\W+"))
+                .filter(word -> !word.isEmpty())
+                .collect(Collectors.toList());
+    }
+
+    public void train(List<String> documents, List<String> labels) {
+        for (int i = 0; i < documents.size(); i++) {
+            String document = documents.get(i);
+            String label = labels.get(i);
+            classes.add(label);
+            classCounts.put(label, classCounts.getOrDefault(label, 0) + 1);
+            List<String> words = preprocessText(document);
+            for (String word : words) {
+                vocabulary.put(word, vocabulary.getOrDefault(word, 0) + 1);
+                wordCountsPerClass.putIfAbsent(label, new HashMap<>());
+                wordCountsPerClass.get(label).put(word, wordCountsPerClass.get(label).getOrDefault(word, 0) + 1);
+            }
+        }
+    }
+
+
+    public String classify(String document) {
+        List<String> words = preprocessText(document);
+        double bestProbability = Double.NEGATIVE_INFINITY;
+        String bestClass = null;
+        for (String cls : classes) {
+            double probability = Math.log(classCounts.get(cls) * 1.0 / classCounts.values().stream().mapToInt(Integer::intValue).sum());
+            for (String word : words) {
+                int wordCount = wordCountsPerClass.getOrDefault(cls, new HashMap<>()).getOrDefault(word, 0);
+                probability += Math.log((wordCount + 1.0) / (vocabulary.size() + classCounts.get(cls)));
+            }
+            if (probability > bestProbability) {
+                bestProbability = probability;
+                bestClass = cls;
+            }
+        }
+        return bestClass;
+    }
+
+    public void evaluate(List<String> testDocuments, List<String> testLabels) {
+        int correct = 0;
+        Map<String, Integer> truePositives = new HashMap<>();
+        Map<String, Integer> falsePositives = new HashMap<>();
+        Map<String, Integer> falseNegatives = new HashMap<>();
+        for (String cls : classes) {
+            truePositives.put(cls, 0);
+            falsePositives.put(cls, 0);
+            falseNegatives.put(cls, 0);
+        }
+        for (int i = 0; i < testDocuments.size(); i++) {
+            String predicted = classify(testDocuments.get(i));
+            String actual = testLabels.get(i);
+            if (predicted.equals(actual)) {
+                correct++;
+                truePositives.put(actual, truePositives.get(actual) + 1);
+            } else {
+                falsePositives.put(predicted, falsePositives.get(predicted) + 1);
+                falseNegatives.put(actual, falseNegatives.get(actual) + 1);
+            }
+        }
+        double accuracy = correct * 1.0 / testDocuments.size();
+        System.out.println("Accuracy: " + accuracy);
+        for (String cls : classes) {
+            double precision = truePositives.get(cls) * 1.0 / (truePositives.get(cls) + falsePositives.get(cls));
+            double recall = truePositives.get(cls) * 1.0 / (truePositives.get(cls) + falseNegatives.get(cls));
+            System.out.println("Class: " + cls);
+            System.out.println("Precision: " + precision);
+            System.out.println("Recall: " + recall);
+        }
+    }
+
+    public static void main(String[] args) {
+        List<String> trainingDocs = Arrays.asList(
+            "The sky is blue",
+            "The sun is bright",
+            "The sun in the sky is bright",
+            "We can see the shining sun, the bright sun"
+        );
+        List<String> trainingLabels = Arrays.asList("weather", "weather", "weather", "weather");
+
+        NaiveBayesianClassifier classifier = new NaiveBayesianClassifier();
+        classifier.train(trainingDocs, trainingLabels);
+
+        List<String> testDocs = Arrays.asList(
+            "The sun in the sky is bright",
+            "We can see the shining sun, the bright sun",
+            "The sky is blue",
+            "The sun is bright"
+        );
+        List<String> testLabels = Arrays.asList("weather", "weather", "weather", "weather");
+
+        classifier.evaluate(testDocs, testLabels);
+    }
+}
